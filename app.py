@@ -4,22 +4,21 @@ import pandas as pd
 import plotly.graph_objects as go
 from streamlit_gsheets import GSheetsConnection
 
-# הגדרות עמוד מותאמות לאייפון
+# הגדרות תצוגה - מותאם למסך האייפון
 st.set_page_config(
-    page_title="Portfolio", 
-    page_icon="🍏", 
-    layout="centered", 
+    page_title="My Wealth",
+    page_icon="🍏",
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS מותאם אישית ל-Safari באייפון (מראה Native) ---
+# --- CSS עיצוב APPLE PRO DARK (RTL) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
     
-    /* עיצוב כללי - שחור עמוק */
     html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: 'Inter', -apple-system, sans-serif;
         background-color: #000000;
         color: #ffffff;
         direction: rtl;
@@ -27,166 +26,135 @@ st.markdown("""
     
     .stApp { background-color: #000000; }
 
-    /* הסתרת אלמנטים של דפדפן ו-Streamlit כדי שיראה כמו אפליקציה */
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
-    #MainMenu {visibility: hidden;}
-    .stDeployButton {display:none;}
-
-    /* כרטיסי מניה בסגנון Apple Dark Mode */
+    /* העלמת אלמנטים של דפדפן למראה אפליקציה נקייה */
+    header, footer, .stDeployButton { visibility: hidden; display: none !important; }
+    
+    /* כרטיס מניה בסגנון iOS */
     .iphone-card {
         background-color: #1c1c1e;
-        border-radius: 20px;
+        border-radius: 22px;
         padding: 20px;
-        margin-bottom: 12px;
+        margin-bottom: 15px;
         border: 1px solid #2c2c2e;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
 
-    .ticker-header { font-size: 1.1rem; font-weight: 700; color: #ffffff; }
-    .allocation-badge { 
-        background-color: #3a3a3c; color: #8e8e93; font-size: 0.75rem; 
-        padding: 3px 8px; border-radius: 8px; 
-    }
+    .ticker-name { font-size: 1.1rem; font-weight: 700; color: #ffffff; }
+    .allocation { background: #3a3a3c; color: #8e8e93; font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; margin-right: 8px; }
+    .price-main { font-size: 1.6rem; font-weight: 700; color: #ffffff; margin-top: 5px; }
     
-    .live-price { font-size: 1.5rem; font-weight: 700; color: #ffffff; }
-    
-    .profit-up { color: #30d158; font-weight: 600; }
-    .profit-down { color: #ff453a; font-weight: 600; }
-    .label { color: #8e8e93; font-size: 0.8rem; text-transform: uppercase; margin-bottom: 2px; }
+    .up { color: #30d158; font-weight: 600; }
+    .down { color: #ff453a; font-weight: 600; }
+    .label { color: #8e8e93; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 2px; }
 
-    /* כפתורי בחירת מטבע מותאמים לאייפון */
-    .stRadio > div { 
-        background-color: #1c1c1e; border-radius: 12px; padding: 5px; 
-        justify-content: center;
-    }
+    /* בורר מטבע מעוצב */
+    .stRadio > div { background: #1c1c1e; border-radius: 15px; padding: 5px; justify-content: center; }
     </style>
 """, unsafe_allow_html=True)
 
-# חיבור לגיליון הגוגל
+# חיבור לגיליון
 SHEET_URL = "https://docs.google.com/spreadsheets/d/18TNmHNZK5Z7YAijKz9UuGj8lSXPgyIs5M24xGK5NGKY/edit?usp=sharing"
-conn = st.connection("gsheets", type=GSheetsConnection)
 
-def load_data():
-    # קריאת המניות מהגיליון (לוקח את הטאב הראשון כברירת מחדל)
+@st.cache_data(ttl=300)
+def fetch_data():
+    conn = st.connection("gsheets", type=GSheetsConnection)
     df = conn.read(spreadsheet=SHEET_URL)
     return df[df['IsActive'].astype(str).str.upper() == 'TRUE']
 
 try:
-    df = load_data()
+    df = fetch_data()
     
     # הבאת שער דולר/שקל
-    with st.spinner('מעדכן נתונים...'):
-        usd_ils = yf.Ticker("ILS=X").history(period="1d")['Close'].iloc[-1]
+    usd_ils = yf.Ticker("ILS=X").history(period="1d")['Close'].iloc[-1]
 
-    # בחירת מטבע (מוצג בראש המסך בצורה נקייה)
-    currency_mode = st.radio("", ["USD", "ILS"], horizontal=True)
+    # בורר מטבע בראש המסך
+    currency_mode = st.radio("", ["USD", "ILS"], horizontal=True, label_visibility="collapsed")
     m = usd_ils if currency_mode == "ILS" else 1
     sym = "₪" if currency_mode == "ILS" else "$"
 
-    # --- חישובים ונתוני שוק ---
-    total_val_usd = 0
-    total_day_profit_usd = 0
-    total_cumul_profit_usd = 0
+    # חישובים גלובליים
     stock_list = []
+    total_val_usd = 0
+    total_day_usd = 0
+    total_cumul_usd = 0
 
     for _, row in df.iterrows():
-        ticker = yf.Ticker(row['Ticker'])
-        hist = ticker.history(period="2d")
-        if hist.empty: continue
+        t = yf.Ticker(row['Ticker'])
+        h = t.history(period="2d")
+        if h.empty: continue
         
-        curr_p = hist['Close'].iloc[-1]
-        prev_p = hist['Close'].iloc[-2]
+        cp = h['Close'].iloc[-1]
+        pp = h['Close'].iloc[-2]
         qty = row['Quantity']
         
-        # רווחים
-        d_profit = (curr_p - prev_p) * qty
-        c_profit = (curr_p - row['AvgPrice']) * qty
+        d_profit = (cp - pp) * qty
+        c_profit = (cp - row['AvgPrice']) * qty
         
-        # נרמול לדולר
         is_usd = row['Currency'] == 'USD'
-        v_usd = (curr_p * qty) if is_usd else (curr_p * qty / usd_ils)
-        d_p_usd = d_profit if is_usd else (d_profit / usd_ils)
-        c_p_usd = c_profit if is_usd else (c_profit / usd_ils)
-
+        v_usd = (cp * qty) if is_usd else (cp * qty / usd_ils)
         total_val_usd += v_usd
-        total_day_profit_usd += d_p_usd
-        total_cumul_profit_usd += c_p_usd
+        total_day_usd += d_profit if is_usd else (d_profit / usd_ils)
+        total_cumul_usd += c_profit if is_usd else (c_profit / usd_ils)
 
         stock_list.append({
-            'row': row, 'cp': curr_p, 'dp': d_profit, 'cpn': c_profit, 'v_usd': v_usd, 'ticker_obj': ticker
+            'row': row, 'cp': cp, 'dp': d_profit, 'cpn': c_profit, 'v_usd': v_usd, 't_obj': t
         })
 
-    # --- באנר סיכום תיק (Header) ---
-    d_total_pct = (total_day_profit_usd / (total_val_usd - total_day_profit_usd)) * 100
-    c_total_pct = (total_cumul_profit_usd / (total_val_usd - total_cumul_profit_usd)) * 100
+    # --- באנר סיכום ראשי ---
+    d_total_pct = (total_day_usd / (total_val_usd - total_day_usd)) * 100 if total_val_usd else 0
+    c_total_pct = (total_cumul_usd / (total_val_usd - total_cumul_usd)) * 100 if total_val_usd else 0
 
     st.markdown(f"""
-        <div style="text-align: center; padding: 20px 0; margin-bottom: 20px;">
-            <div style="color: #8e8e93; font-size: 0.9rem;">סה"כ שווי התיק</div>
-            <div style="font-size: 3rem; font-weight: 700;">{sym}{total_val_usd * m:,.0f}</div>
-            <div style="display: flex; justify-content: center; gap: 15px; margin-top: 10px;">
-                <div class="{'profit-up' if total_day_profit_usd >=0 else 'profit-down'}">
-                    יומי: {sym}{total_day_profit_usd * m:,.0f} ({d_total_pct:+.2f}%)
-                </div>
-                <div class="{'profit-up' if total_cumul_profit_usd >=0 else 'profit-down'}">
-                    מעלות: {sym}{total_cumul_profit_usd * m:,.0f} ({c_total_pct:+.2f}%)
-                </div>
+        <div style="text-align: center; padding: 30px 0;">
+            <div style="color: #8e8e93; font-size: 0.8rem; letter-spacing: 1px;">TOTAL BALANCE</div>
+            <div style="font-size: 3.5rem; font-weight: 700; margin: 5px 0;">{sym}{total_val_usd * m:,.0f}</div>
+            <div style="display: flex; justify-content: center; gap: 20px;">
+                <div class="{'up' if total_day_usd >=0 else 'down'}">יומי: {sym}{total_day_usd * m:,.0f} ({d_total_pct:+.2f}%)</div>
+                <div class="{'up' if total_cumul_usd >=0 else 'down'}">מעלות: {sym}{total_cumul_usd * m:,.0f} ({c_total_pct:+.2f}%)</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
 
-    # --- רשימת המניות (Cards) ---
+    # --- רשימת נכסים ---
     for item in stock_list:
         r = item['row']
-        # המרה להצגה לפי בחירת המשתמש
-        disp_d = item['dp'] * (usd_ils if r['Currency'] == 'USD' and currency_mode == 'ILS' else (1/usd_ils if r['Currency'] == 'ILS' and currency_mode == 'USD' else 1))
-        disp_c = item['cpn'] * (usd_ils if r['Currency'] == 'USD' and currency_mode == 'ILS' else (1/usd_ils if r['Currency'] == 'ILS' and currency_mode == 'USD' else 1))
+        # המרה להצגה
+        is_orig_usd = r['Currency'] == 'USD'
+        conv = (usd_ils if currency_mode == "ILS" and is_orig_usd else 
+                (1/usd_ils if currency_mode == "USD" and not is_orig_usd else 1))
         
-        d_class = "profit-up" if item['dp'] >= 0 else "profit-down"
-        c_class = "profit-up" if item['cpn'] >= 0 else "profit-down"
-
         st.markdown(f"""
             <div class="iphone-card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div>
-                        <span class="ticker-header">{r['Name']}</span> <span class="allocation-badge">{(item['v_usd']/total_val_usd)*100:.1f}%</span>
+                        <span class="ticker-name">{r['Name']}</span><span class="allocation">{(item['v_usd']/total_val_usd)*100:.1f}%</span>
                         <div style="color: #8e8e93; font-size: 0.8rem;">{r['Ticker']}</div>
                     </div>
                     <div style="text-align: left;">
-                        <div class="label">LIVE PRICE</div>
-                        <div class="live-price">{item['cp']:,.2f} <span style="font-size: 0.8rem;">{r['Currency']}</span></div>
+                        <div class="label">Price</div>
+                        <div class="price-main">{item['cp']:,.2f} <span style="font-size: 0.7rem;">{r['Currency']}</span></div>
                     </div>
                 </div>
-                <div style="display: flex; justify-content: space-between; margin-top: 18px; border-top: 1px solid #2c2c2e; padding-top: 12px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; margin-top: 20px; border-top: 1px solid #2c2c2e; padding-top: 15px;">
                     <div>
                         <div class="label">תשואה יומית</div>
-                        <div class="{d_class}">{disp_d:,.2f} {sym}</div>
+                        <div class="{'up' if item['dp'] >= 0 else 'down'}">{item['dp']*conv:,.2f} {sym}</div>
                     </div>
                     <div style="text-align: left;">
                         <div class="label">מעלות</div>
-                        <div class="{c_class}">{disp_c:,.2f} {sym}</div>
+                        <div class="{'up' if item['cpn'] >= 0 else 'down'}">{item['cpn']*conv:,.2f} {sym}</div>
                     </div>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 
-        # גרף וניתוח (נפתח בלחיצה)
-        with st.expander("Analytics & News"):
+        with st.expander("Analytics"):
             rng = st.select_slider("Range", options=["1D", "1W", "1M", "1Y"], key=f"r_{r['Ticker']}")
             p_map = {"1D":"1d", "1W":"5d", "1M":"1mo", "1Y":"1y"}
-            ch_data = item['ticker_obj'].history(period=p_map[rng])
-            
-            fig = go.Figure(data=[go.Scatter(
-                x=ch_data.index, y=ch_data['Close'], 
-                line=dict(color='#30d158', width=2),
-                hovertemplate='Price: %{y:,.2f}<br>Date: %{x}<extra></extra>'
-            )])
-            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                              height=220, margin=dict(l=0,r=0,t=0,b=0), xaxis=dict(showgrid=False))
+            ch = item['t_obj'].history(period=p_map[rng])
+            fig = go.Figure(data=[go.Scatter(x=ch.index, y=ch['Close'], line=dict(color='#30d158', width=2), hovertemplate='%{y:,.2f}<extra></extra>')])
+            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=200, margin=dict(l=0,r=0,t=0,b=0), xaxis=dict(showgrid=False))
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-            
-            for news in item['ticker_obj'].news[:2]:
-                st.markdown(f"• [{news['title']}]({news['link']})")
 
 except Exception as e:
-    st.error("החיבור לגיליון נכשל. וודא שהגיליון מוגדר כ-Anyone with the link can view.")
+    st.error(f"Error: {e}")

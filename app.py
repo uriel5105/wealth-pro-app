@@ -26,7 +26,14 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- פונקציות ניהול משתמשים ---
 def get_users():
-    return conn.read(spreadsheet=SHEET_URL, worksheet="Users")
+    # מעקף זמני כדי לבדוק שהאפליקציה עובדת בלי תלות בטאב Users
+    data = {
+        "Username": ["Uriel"],
+        "Password": ["1234"],
+        "Email": ["test@test.com"],
+        "Role": ["Admin"]
+    }
+    return pd.DataFrame(data)
 
 def add_user(new_u, new_p, new_e, new_r):
     df_users = get_users()

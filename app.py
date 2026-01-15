@@ -97,7 +97,7 @@ else:
         st.rerun()
 
     # --- טעינת נתונים וחישובים ---
-    portfolio = conn.read(spreadsheet=SHEET_URL, worksheet="Portfolio")
+    portfolio = conn.read(spreadsheet=SHEET_URL)
     active = portfolio[portfolio['IsActive'].astype(str).str.upper() == 'TRUE']
     usd_ils = yf.Ticker("ILS=X").history(period="1d")['Close'].iloc[-1]
     m = usd_ils if currency_mode == "ILS" else 1

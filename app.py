@@ -19,7 +19,7 @@ st.markdown("""
     .secondary-text { color: #8e8e93; font-size: 0.8rem; }
     input { background-color: #1c1c1e !important; color: white !important; border-radius: 10px !important; }
     </style>
-""", unsafe_allow_status=True)
+""", unsafe_allow_html=True)
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/18TNmHNZK5Z7YAijKz9UuGj8lSXPgyIs5M24xGK5NGKY/edit?usp=sharing"
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -41,7 +41,7 @@ if "auth" not in st.session_state:
     st.session_state.role = "Viewer"
 
 if not st.session_state.auth:
-    st.markdown("<h1 style='text-align: center; margin-top: 30px;'>Wealth Pro</h1>", unsafe_allow_status=True)
+    st.markdown("<h1 style='text-align: center; margin-top: 30px;'>Wealth Pro</h1>", unsafe_allow_html=True)
     tab_login, tab_reset = st.tabs(["כניסה", "איפוס סיסמה"])
     
     with tab_login:
@@ -135,7 +135,7 @@ else:
                 <div class="{'profit-up' if total_cum_usd >=0 else 'profit-down'}">מעלות: {sym}{total_cum_usd * m:,.0f} ({c_p_total:+.2f}%)</div>
             </div>
         </div>
-    """, unsafe_allow_status=True)
+    """, unsafe_allow_html=True)
 
     # כרטיסי מניות
     for item in display_list:
@@ -169,7 +169,7 @@ else:
                     </div>
                 </div>
             </div>
-        """, unsafe_allow_status=True)
+        """, unsafe_allow_html=True)
 
         with st.expander("Analysis & Chart"):
             tkr = yf.Ticker(r['Ticker'])
